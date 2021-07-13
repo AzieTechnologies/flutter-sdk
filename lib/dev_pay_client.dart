@@ -29,6 +29,7 @@ class DevPayClient {
     this.config = config;
     RestClient client = paymentManagerRestClient();
     manager = PaymentManager(client);
+    manager.config = config;
     manager.paymentIntentSecret = config.accessKey;
   }
 

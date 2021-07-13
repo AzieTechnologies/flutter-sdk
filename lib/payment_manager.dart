@@ -1,3 +1,4 @@
+import 'package:dev_pay/dev_pay.dart';
 import 'package:dev_pay/models/payment_method.dart';
 import 'package:dev_pay/rest_client.dart';
 
@@ -7,14 +8,53 @@ import 'models/payment_intent.dart';
 class PaymentManager {
   late RestClient client;
   late String paymentIntentSecret;
+  late Config config;
 
   PaymentManager(RestClient client) {
     this.client = client;
   }
 
+  RestClient devpayRestClient(){
+    Map<String, String> headers = new Map();
+    headers["Content-Type"] = "application/json";
+
+    String baseURL = "https://api.devpay.io";
+    RestClient client = new RestClient(baseURL, headers, config.debug);
+    client.debug = config.debug;
+    return client;
+  }
+
+  Future createDevpayPayIntent(RestClient client, PaymentDetail paymentDetail) async {
+    Map<String, dynamic> paymentIntentsInfo() => {
+      "amount": paymentDetail.amount,
+      "currency": _StringifiedCurrency(paymentDetail.currency),
+      "payment_method_types":["card"],
+      "capture_method": "automatic",
+    };
+
+    Map<String, dynamic> requestDetails = new Map();
+    requestDetails["DevpayId"] = this.config.accountId;
+    if (this.config.sandbox) {
+      requestDetails["env"] = "sandbox";
+    }
+    requestDetails["token"] = this.config.accessKey;
+
+    Map<String, dynamic> jsonReqData() => {
+      "PaymentIntentsInfo": paymentIntentsInfo(),
+      "RequestDetails": requestDetails
+    };
+
+    var response = await client.post("/v1/general/paymentintent", jsonReqData());
+    if (response["Response"]["status"] == 1) {
+      return true;
+    }
+    throw "failed to create dev-pay payment intent";
+  }
+
   Future<PaymentIntent> confirmPayment(
       String paymentToken, PaymentDetail paymentDetail) async {
-    return createMethod(paymentToken, paymentDetail)
+    return createDevpayPayIntent(devpayRestClient(), paymentDetail)
+        .then((value) => createMethod(paymentToken, paymentDetail))
         .then((method) => createIntent(method, paymentDetail));
   }
 
