@@ -7,60 +7,22 @@ import 'models/payment_intent.dart';
 
 class PaymentManager {
   late RestClient client;
-  late String paymentIntentSecret;
   late Config config;
 
   PaymentManager(RestClient client) {
     this.client = client;
   }
 
-  RestClient devpayRestClient(){
-    Map<String, String> headers = new Map();
-    headers["Content-Type"] = "application/json";
-
-    String baseURL = "https://api.devpay.io";
-    RestClient client = new RestClient(baseURL, headers, config.debug);
-    client.debug = config.debug;
-    return client;
-  }
-
-  Future createDevpayPayIntent(RestClient client, PaymentDetail paymentDetail) async {
-    Map<String, dynamic> paymentIntentsInfo() => {
-      "amount": paymentDetail.amount,
-      "currency": _StringifiedCurrency(paymentDetail.currency),
-      "payment_method_types":["card"],
-      "capture_method": "automatic",
-    };
-
-    Map<String, dynamic> requestDetails = new Map();
-    requestDetails["DevpayId"] = this.config.accountId;
-    if (this.config.sandbox) {
-      requestDetails["env"] = "sandbox";
-    }
-    requestDetails["token"] = this.config.accessKey;
-
-    Map<String, dynamic> jsonReqData() => {
-      "PaymentIntentsInfo": paymentIntentsInfo(),
-      "RequestDetails": requestDetails
-    };
-
-    var response = await client.post("/v1/general/paymentintent", jsonReqData());
-    if (response["Response"]["status"] == 1) {
-      return true;
-    }
-    throw "failed to create dev-pay payment intent";
-  }
-
   Future<PaymentIntent> confirmPayment(
       String paymentToken, PaymentDetail paymentDetail) async {
-    return createDevpayPayIntent(devpayRestClient(), paymentDetail)
-        .then((value) => createMethod(paymentToken, paymentDetail))
-        .then((method) => createIntent(method, paymentDetail));
+
+    return createMethod(paymentToken, paymentDetail)
+           .then((method) => createIntent(method, paymentDetail));
   }
 
   Future<PaymentMethod> createMethod(
       String paymentToken, PaymentDetail paymentDetail) async {
-    Map<String, dynamic> jsonReqData() => {
+    Map<String, dynamic> paymentMethodInfo() => {
           "payment_token": paymentToken,
           "type": "card",
           "amount": paymentDetail.amount,
@@ -68,14 +30,20 @@ class PaymentManager {
           "address": paymentDetail.billingAddress.toJSON()
         };
 
-    var response = await client.post("/v1/payment-methods", jsonReqData());
-    PaymentMethod method = PaymentMethod.buildFromJson(response);
+
+    Map<String, dynamic> jsonReqData() => {
+      "PaymentMethodInfo": paymentMethodInfo(),
+      "RequestDetails": _requestDetails()
+    };
+
+    var response = await client.post("/v1/paymentmethods/create", jsonReqData());
+    PaymentMethod method = PaymentMethod.buildFromJson(response["PaymentMethodResponse"]);
     return method;
   }
 
   Future<PaymentIntent> createIntent(
       PaymentMethod method, PaymentDetail paymentDetail) async {
-    Map<String, dynamic> jsonReqData() => {
+    Map<String, dynamic> paymentIntentsInfo() => {
           "capture_method": "automatic",
           "payment_method_types": ["card"],
           "amount": paymentDetail.amount,
@@ -85,17 +53,33 @@ class PaymentManager {
           "metadata": paymentDetail.metaData
         };
 
+    Map<String, dynamic> jsonReqData() => {
+      "PaymentIntentsInfo": paymentIntentsInfo(),
+      "RequestDetails": _requestDetails()
+    };
 
     Map<String, String> headers = new Map();
-    headers["Authorization"] = "Bearer " + paymentIntentSecret;
 
-    var response = await client.post("/v1/payment-intents", jsonReqData(),headers: headers);
-    PaymentIntent intent = PaymentIntent.buildFromJson(response);
+    var response = await client.post("/v1/general/paymentintent", jsonReqData(),headers: headers);
+    PaymentIntent intent = PaymentIntent.buildFromJson(response["PaymentIntentsResponse"]);
     return intent;
   }
 
+  Map<String, dynamic> _requestDetails(){
+    Map<String, dynamic> requestDetails = new Map();
+    requestDetails["DevpayId"] = this.config.accountId;
+    if (this.config.sandbox) {
+      requestDetails["env"] = "sandbox";
+    }
+    requestDetails["token"] = this.config.accessKey;
+    return requestDetails;
+  }
+
   Future<String> paysafeAPIKey() async {
-    var response = await client.get("/v1/payment-providers/paysafe/api-key");
+    Map<String, dynamic> jsonReqData() => {
+      "RequestDetails": _requestDetails()
+    };
+    var response = await client.post("/v1/general.svc/paysafe/api-key", jsonReqData(),headers: new Map());
     var apiKey = response["provider_api_key"];
     return apiKey;
   }

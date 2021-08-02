@@ -30,7 +30,6 @@ class DevPayClient {
     RestClient client = paymentManagerRestClient();
     manager = PaymentManager(client);
     manager.config = config;
-    manager.paymentIntentSecret = config.accessKey;
   }
 
   Future<PaymentIntent> confirmPayment(PaymentDetail paymentDetail) async {
@@ -42,17 +41,10 @@ class DevPayClient {
   }
 
   RestClient paymentManagerRestClient(){
-
     Map<String, String> headers = new Map();
-    headers["Authorization"] = "Bearer " + config.shareableKey;
-    headers["tilled-account"] = config.accountId;
     headers["Content-Type"] = "application/json";
 
-    String baseURL = "https://api.tilled.com";
-    if (config.sandbox) {
-      baseURL = "https://sandbox-api.tilled.com";
-    }
-
+    String baseURL = "https://api.devpay.io";
     RestClient client = new RestClient(baseURL, headers, config.debug);
     client.debug = config.debug;
     return client;
